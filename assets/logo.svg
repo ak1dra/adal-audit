@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="ADAL">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#123A63"/>
+      <stop offset="1" stop-color="#0A2240"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6D27A"/>
+      <stop offset="1" stop-color="#D9A23A"/>
+    </linearGradient>
+  </defs>
+  <!-- щит -->
+  <path d="M128 14 L222 46 V120 C222 178 182 220 128 242 C74 220 34 178 34 120 V46 Z"
+        fill="url(#bg)" stroke="url(#gold)" stroke-width="6" stroke-linejoin="round"/>
+  <!-- қошқар мүйіз: орнамент «рога барана» над линзой -->
+  <g fill="none" stroke="url(#gold)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M128 92 C128 68 112 56 96 58 C80 60 74 76 82 86 C88 94 100 92 102 84"/>
+    <path d="M128 92 C128 68 144 56 160 58 C176 60 182 76 174 86 C168 94 156 92 154 84"/>
+  </g>
+  <!-- линза аудитора -->
+  <circle cx="128" cy="138" r="40" fill="#0A2240" stroke="#2EC4E6" stroke-width="8"/>
+  <path d="M157 167 L184 194" stroke="#2EC4E6" stroke-width="12" stroke-linecap="round"/>
+  <!-- галочка: проверено -->
+  <path d="M108 139 L123 154 L150 124" fill="none" stroke="url(#gold)" stroke-width="9"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

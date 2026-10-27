@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+skills/adal-audit/data/lot_cache/
+*.xlsx
+suspicious.json
+review.json

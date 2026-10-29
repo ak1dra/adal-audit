@@ -49,7 +49,7 @@
 ### Вариант Б. Claude Code: полный режим, тысячи лотов
 
 ```bash
-git clone https://github.com/<ваш-аккаунт>/adal-audit.git
+git clone https://github.com/ak1dra/adal-audit.git
 mkdir -p ~/.claude/skills
 cp -R adal-audit/skills/adal-audit ~/.claude/skills/
 pip install openpyxl pypdf

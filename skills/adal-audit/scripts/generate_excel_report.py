@@ -70,7 +70,8 @@ def cell(ws, row, col, value, fmt=None, bold=False, bg=None, link=None):
 def sheet_suspicious(wb, rows):
     ws = wb.active
     ws.title = "Сомнительные лоты"
-    ws["A1"] = f"Реестр сомнительных лотов госзакупок РК — {len(rows)} шт."
+    ws["A1"] = (f"Реестр сомнительных лотов госзакупок РК — {len(rows)} шт." if rows else
+                "Сомнительных лотов по автоматическим признакам не найдено — см. лист «Требуют ручной проверки»")
     ws["A1"].font = TITLE_FONT
     ws["A2"] = "Флажок — индикатор риска, а не доказательство нарушения. Каждый лот требует ручной проверки."
     ws["A2"].font = Font(italic=True, color="7F7F7F")
@@ -194,6 +195,42 @@ def sheet_summary(wb, all_rows, shown, params, excluded):
         ws.column_dimensions[col].width = w
 
 
+def sheet_manual(wb, all_rows, shown, n=25):
+    """Крупные лоты, которые движок не смог оценить по цене: нет ни Kaspi, ни сравнения с
+    другими заказчиками. Пустой реестр не должен выглядеть как «всё чисто»."""
+    ws = wb.create_sheet("Требуют ручной проверки")
+    shown_ids = {id(r) for r in shown}
+    rows = [r for r in all_rows if id(r) not in shown_ids and not r["kaspi"]
+            and "PRICE_PEER_OUTLIER" not in r["flags"]]
+    rows = sorted(rows, key=lambda r: -r["total"])[:n]
+    ws["A1"] = f"Крупные лоты без ценовой сверки — {len(rows)} шт."
+    ws["A1"].font = TITLE_FONT
+    ws["A2"] = ("Модели нет ни в названии, ни в ТЗ, и аналогов у других заказчиков нет — рыночную цену нужно "
+                "оценить вручную (коммерческие предложения, прайсы, Kaspi по характеристикам).")
+    ws["A2"].font = Font(italic=True, color="7F7F7F")
+    header(ws, 4, 1, ["№", "Лот → портал", "Заказчик", "Способ", "Кол-во", "Цена за ед. с НДС", "Сумма с НДС",
+                      "Заявок", "Победитель / цена", "Срок поставки", "ТЗ (выдержка) → PDF", "Балл"])
+    for i, r in enumerate(rows, start=5):
+        e = r.get("enriched") or {}
+        w = e.get("winner") or {}
+        cell(ws, i, 1, i - 4)
+        cell(ws, i, 2, f"{r['lot_id']}\n{r['name']}", link=r.get("lot_url"))
+        cell(ws, i, 3, r["customer"])
+        cell(ws, i, 4, r["method"])
+        cell(ws, i, 5, r["qty"])
+        cell(ws, i, 6, r["unit_price"], MONEY)
+        cell(ws, i, 7, r["total"], MONEY)
+        cell(ws, i, 8, e.get("bids_count", "н/д") if e else "н/д")
+        cell(ws, i, 9, f"{w.get('name', '')[:40]}\n{w['unit_price']:,.0f} ₸".replace(",", " ")
+             if w.get("unit_price") else ("итогов нет" if e else "н/д"), link=e.get("protocol_url"))
+        cell(ws, i, 10, e.get("delivery_term") or "н/д")
+        cell(ws, i, 11, (e.get("spec_full") or "")[:300] or "н/д", link=e.get("techspec_url"))
+        cell(ws, i, 12, r["risk_score"])
+        ws.row_dimensions[i].height = 60
+    for col, w in zip("ABCDEFGHIJKL", (5, 38, 34, 20, 8, 15, 16, 8, 26, 22, 50, 7)):
+        ws.column_dimensions[col].width = w
+
+
 def sheet_method(wb):
     ws = wb.create_sheet("Методология")
     ws["A1"] = "Индикаторы риска (Red Flags)"
@@ -284,9 +321,18 @@ def run(a) -> tuple[list[dict], list[dict]]:
     # Дозагрузка карточек лотов (ТЗ, срок, участники) — только для кандидатов, затем переоценка
     enriched = 0
     if a.enrich_limit and not a.demo and not a.lots_json:
-        cand = sorted((r for r in rows if r["risk_score"] >= 25 and r.get("trd_buy_id")),
-                      key=lambda r: -r["risk_score"])[:a.enrich_limit]
-        ids = {id(l) for l in lots}
+        flagged = sorted((r for r in rows if r["risk_score"] >= 25 and r.get("trd_buy_id")),
+                         key=lambda r: -r["risk_score"])
+        # крупнейшие лоты проверяются всегда: у них часто нет модели в названии, и без ТЗ
+        # движку нечего сравнивать — а деньги там самые большие
+        biggest = sorted((r for r in rows if r.get("trd_buy_id")), key=lambda r: -r["total"])[:a.enrich_top]
+        seen, cand = set(), []
+        for r in flagged + biggest:
+            k = (r["trd_buy_id"], str(r["lot_id"]))
+            if k not in seen:
+                seen.add(k)
+                cand.append(r)
+        cand = cand[:a.enrich_limit + a.enrich_top]
         by_key = {(l.get("trd_buy_id"), str(l["lot_id"])): i for i, l in enumerate(lots)}
         for n, r in enumerate(cand, 1):
             print(f"[enrich] {n}/{len(cand)} {r['lot_id']}", file=sys.stderr)
@@ -298,7 +344,16 @@ def run(a) -> tuple[list[dict], list[dict]]:
             i = by_key[(r.get("trd_buy_id"), str(r["lot_id"]))]
             lots[i] = enrich_lots.apply(lots[i], info, risk_engine.VAT)
             enriched += 1
-        del ids
+        # модель/артикул часто есть только в ТЗ — строим запрос в Kaspi по полному тексту
+        new_q = []
+        for l in lots:
+            spec = (l.get("enriched") or {}).get("spec_full")
+            if spec and not l.get("kaspi_query"):
+                l["kaspi_query"] = fetch_goszakup.kaspi_query_for(l["name"], spec)
+                if l["kaspi_query"]:
+                    new_q.append(l["kaspi_query"])
+        if new_q and not a.kaspi_json:
+            kaspi_map.update(search_kaspi.check_many(new_q, demo=not a.live, budget=a.kaspi_limit))
         rows = risk_engine.assess_all(lots, kaspi_map)
 
     review = json.loads(Path(a.review).read_text(encoding="utf-8")) if a.review else {}
@@ -332,6 +387,7 @@ def run(a) -> tuple[list[dict], list[dict]]:
     wb = Workbook()
     sheet_suspicious(wb, shown)
     sheet_summary(wb, rows, shown, params, excluded)
+    sheet_manual(wb, rows, shown)
     sheet_method(wb)
     wb.save(a.output)
     return rows, shown
@@ -346,6 +402,8 @@ def main() -> None:
     ap.add_argument("--kaspi-limit", type=int, default=150, help="макс. живых запросов к Kaspi за прогон")
     ap.add_argument("--enrich-limit", type=int, default=50,
                     help="сколько кандидатов дозагрузить с портала (ТЗ, срок, участники); 0 — выкл.")
+    ap.add_argument("--enrich-top", type=int, default=10,
+                    help="сколько крупнейших лотов дозагрузить всегда, даже без флажков")
     ap.add_argument("--top", type=int, default=100, help="макс. лотов в реестре (самые рискованные)")
     ap.add_argument("--include-medium", action="store_true", help="включить СРЕДНИЙ уровень в реестр")
     ap.add_argument("--review", help="JSON с вердиктами аудитора {lot_id: {status, note}}")

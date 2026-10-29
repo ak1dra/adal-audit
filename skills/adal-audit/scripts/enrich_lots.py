@@ -73,8 +73,23 @@ def parse_techspec(text: str) -> dict:
     desc = _field(ru, "эксплуатационные\nхарактеристики закупаемых\nтоваров:", labels) or \
         _field(ru, "характеристики закупаемых товаров:", labels)
     extra = _field(ru, "Дополнительное описание\nлота:", labels) or _field(ru, "Дополнительное описание лота:", labels)
-    return {"delivery_term": term, "delivery_place": _field(ru, "Места поставки:", labels),
-            "spec_full": " ".join(x for x in [_field(ru, "Описание лота:", labels), extra, desc] if x)[:3000]}
+    out = {"delivery_term": term, "delivery_place": _field(ru, "Места поставки:", labels),
+           "spec_full": " ".join(x for x in [_field(ru, "Описание лота:", labels), extra, desc] if x)[:3000]}
+    if not out["delivery_term"] and not out["spec_full"]:
+        out.update(_parse_konkurs(ru))
+    return out
+
+
+def _parse_konkurs(ru: str) -> dict:
+    """Формат конкурсов/аукционов: поля «Срок поставки*:», «Место поставки товара*:», описание
+    после «…иных характеристик закупаемого товара»."""
+    flat = re.sub(r"\s+", " ", ru)
+    term = re.search(r"Срок поставки\*?:\s*(.+?)(?: Место поставки| Размер авансового|$)", flat)
+    place = re.search(r"Место поставки товара\*?:\s*(.+?)(?: Размер авансового| Наименование национальных|$)", flat)
+    desc = re.search(r"иных характеристик закупаемого товара\s*(.+?)(?: Сопутствующие услуги| Подпись| Дата\s|$)", flat)
+    return {"delivery_term": term.group(1).strip()[:300] if term else None,
+            "delivery_place": place.group(1).strip()[:200] if place else None,
+            "spec_full": desc.group(1).strip()[:3000] if desc else ""}
 
 
 def delivery_days(term: str | None, acceptance_end: str | None) -> int | None:

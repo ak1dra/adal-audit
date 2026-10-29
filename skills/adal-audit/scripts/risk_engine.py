@@ -37,6 +37,19 @@ LEVELS = [  # (порог, код, подпись, цвет заливки, де
 ]
 
 
+def pack_size(lot: dict, kaspi: dict | None) -> int:
+    import re
+    if not kaspi:
+        return 1
+    text = f"{lot.get('announce', '')} {lot.get('name', '')} {lot.get('spec', '')}".lower()
+    m = re.search(r"(?:комплект\w*\D{0,20}?(\d{1,3})\s*(?:шт|штук))|(?:\((\d{1,3})\s*(?:шт|штук)\w*,?\s*комплект)", text)
+    n = int(next(g for g in m.groups() if g)) if m else 1
+    title = (kaspi.get("title") or "").lower()
+    if n > 1 and not re.search(rf"\b{n}\s*шт", title):  # на Kaspi не такой же комплект
+        return n
+    return 1
+
+
 def level_for(score: int) -> tuple:
     for lvl in LEVELS:
         if score >= lvl[0]:
@@ -51,6 +64,10 @@ def assess(lot: dict, kaspi: dict | None, peer: dict | None = None) -> dict:
     if kaspi and kaspi.get("median_price") and kaspi["median_price"] < unit * 0.2:
         kaspi = None
     median = kaspi.get("median_price") if kaspi else None
+    # «комплект из 4 шт» при количестве 1: цена лота — за комплект, Kaspi — за штуку
+    pack = pack_size(lot, kaspi)
+    if pack > 1:
+        unit = unit / pack
     dev = None
     if median:
         dev = (unit - median) / median * 100
@@ -133,8 +150,12 @@ def explain(lot, kaspi, peer, flags, dev) -> list[str]:
     """Человекочитаемые основания с конкретными цифрами — для справки комиссии."""
     r = []
     win = lot.get("winner_unit_price")
+    pack = pack_size(lot, kaspi)
+    if pack > 1:
+        r.append(f"Лот — комплект из {pack} шт.: сравнение с Kaspi за 1 шт. "
+                 f"({_m(lot['unit_price'] / pack)} за штуку)")
     if kaspi and dev is not None and dev > 10:
-        r.append(f"Цена за ед. {_m(lot['unit_price'])} выше медианы Kaspi {_m(kaspi['median_price'])} "
+        r.append(f"Цена за ед. {_m(lot['unit_price'] / pack)} выше медианы Kaspi {_m(kaspi['median_price'])} "
                  f"на {dev:.0f}% (мин. {_m(kaspi['min_price'])}, продавцов: {kaspi.get('sellers_count')})")
     if win:
         r.append(f"Победитель: {lot.get('enriched', {}).get('winner', {}).get('name', '—')} — {_m(win)} за ед."

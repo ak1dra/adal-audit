@@ -389,5 +389,27 @@
     "delivery_label": "EXPRESS",
     "source": "live",
     "fetched_at": "2026-10-27 16:17"
+  },
+  "амортизатор LADA LADA-21214 21214": {
+    "query": "амортизатор LADA LADA-21214 21214",
+    "product_id": "153182947",
+    "title": "LADA задний 21214-2915402-20 1 шт",
+    "min_price": 17300.0,
+    "median_price": 17300.0,
+    "max_price": 17300.0,
+    "p25": 17300.0,
+    "p75": 17300.0,
+    "sellers_count": 1,
+    "rating": 0.0,
+    "reviews_count": null,
+    "kaspi_url": "https://kaspi.kz/shop/p/-153182947/?c=710000000",
+    "delivery_label": "До 7 дней",
+    "source": "live",
+    "fetched_at": "2026-10-27 17:29"
+  },
+  "уголь ISO IEC 5000 6986": {
+    "query": "уголь ISO IEC 5000 6986",
+    "not_found": true,
+    "fetched_at": "2026-10-27 17:30"
   }
 }
